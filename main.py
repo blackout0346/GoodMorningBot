@@ -59,7 +59,7 @@ def handle_time_selection(call):
         if action == 'set_h':
             temp_data[user_id]['hour'] = value.zfill(2)
             markup = types.InlineKeyboardMarkup(row_width=6)
-            minutes = ["10","20","30","40","50"]
+            minutes = ["00","10","20","30","40","50"]
             buttons = [types.InlineKeyboardButton(m, callback_data=f"set_m:{m}") for m in minutes]
             markup.add(*buttons)
             bot.edit_message_text(f"Выбран час:{value}.теперь выберите минуты", chat_id=user_id, message_id=call.message.message_id, reply_markup=markup)
