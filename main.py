@@ -3,7 +3,7 @@ import datetime
 import telebot
 from telebot import types
 import Config
-
+import pytz
 import time
 bot = telebot.TeleBot(Config.api_key)
 album_storage ={}
@@ -12,9 +12,9 @@ userMode={}
 Group_ID = Config.groups_id
 temp_data ={}
 def Delivery_shape():
-
+    tz = pytz.timezone('Asia/Irkutsk')
     while True:
-        current_time = datetime.datetime.now().strftime("%H:%M")
+        current_time = datetime.datetime.now(tz).strftime("%H:%M")
 
         to_send = [item for item in storagePhoto if item["send_time"] == current_time]
 
@@ -111,9 +111,10 @@ def set_morning(message):
         if message.media_group_id not in album_storage:
             album_storage[message.media_group_id] = []
             threading.Timer(1.5, process_album_done, args=[message, album_storage[message.media_group_id], message.media_group_id]).start()
+        album_storage[message.media_group_id].append(message.photo[-1].file_id)
     except Exception as e:
         print(e)
-    album_storage[message.media_group_id].append(message.photo[-1].file_id)
+
 def process_album_done(message, file_ids, group_id=None):
     try:
         user_id = message.chat.id
