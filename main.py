@@ -1,82 +1,48 @@
 import threading
 import datetime
 import telebot
+
 from telebot import types
 import Config
 import pytz
 import time
+import json
+import os
+SETTINGS_FILE = 'user_settings.json'
+
 bot = telebot.TeleBot(Config.api_key)
 album_storage ={}
 storagePhoto = []
 userMode={}
-Group_ID = Config.groups_id
+
+
 temp_data ={}
-def Delivery_shape():
-    tz = pytz.timezone('Asia/Irkutsk')
-    while True:
-        current_time = datetime.datetime.now(tz).strftime("%H:%M")
 
-        to_send = [item for item in storagePhoto if item["send_time"] == current_time]
 
-        if to_send:
-                try:
-                    media=[]
-                    for i, item in enumerate(to_send):
-                        caption = item.get('caption') if i == 0 else None
-                        media.append(types.InputMediaPhoto(item['file_id'], caption=caption))
-                    bot.send_media_group(to_send[0]['chat_id'], media)
-                    for item in to_send:
-                        storagePhoto.remove(item)
-                        print(f"{current_time}, Альбом отправлен!")
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
 
-                except Exception as e:
-                    print(e)
-        time.sleep(2)
+def save_settings(data):
+    with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
-threading.Thread(target=Delivery_shape, daemon=True).start()
-
+user_setting = load_settings()
 
 @bot.message_handler(commands =['start'])
 def sendMessage(message):
     try:
-        bot.send_message(message.chat.id, "Привет, я ботик❤️ и всё что я умею делать это отправлять фотки для вашей группы в определённое время. К примеру вы можете желать подписчикам спокойной ночи и доброе утро. Если что-то не то выложили, то можете удалить все фотографии ")
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(types.InlineKeyboardButton(text='Выбрать фотографии для доброе утро и спокойной ночи', callback_data='mode:photo'))
-        keyboard.add(types.InlineKeyboardButton(text='Выбрать Очистеть всё!!!', callback_data='mode:Clear'))
-        bot.send_message(message.chat.id,"Выберите режим", reply_markup=keyboard)
+        bot.send_message(message.chat.id, "Привет, я ботик❤️ и всё что я умею делать это отправлять фотки для вашей группы в определённое время.\n К примеру вы можете желать подписчикам спокойной ночи и доброе утро.\n Если что-то не то выложили, то можете удалить все фотографии ")
+        msg =bot.send_message(message.chat.id,"Для начало работы вам необходим токен от группы. Чтобы получить токен небходимо в свою группу добавить @Getmyid_Work_Bot(Он выдаст вам токен. Пример'-1992002323210')\n И для работы ещё необходимо добавить меня в группу для отправки фоток ")
+        bot.register_next_step_handler(msg, SetTokenGroup)
+
+
     except Exception as e:
         print(e)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(('set_h:', 'set_m:')))
-def handle_time_selection(call):
-    try:
-        user_id = call.message.chat.id
-        data = call.data.split(':')
-        action = data[0]
-        value = data[1]
-        if user_id not in temp_data:
-            temp_data[user_id] = {}
-        if action == 'set_h':
-            temp_data[user_id]['hour'] = value.zfill(2)
-            markup = types.InlineKeyboardMarkup(row_width=6)
-            minutes = ["00","10","20","30","40","50"]
-            buttons = [types.InlineKeyboardButton(m, callback_data=f"set_m:{m}") for m in minutes]
-            markup.add(*buttons)
-            bot.edit_message_text(f"Выбран час:{value}.теперь выберите минуты", chat_id=user_id, message_id=call.message.message_id, reply_markup=markup)
-        elif action =='set_m':
-            hour = temp_data[user_id]['hour']
-            minute = value.zfill(2)
-            full_time = f"{hour}:{minute}"
-            temp_data[user_id]['time'] =full_time
-            keyboard = types.InlineKeyboardMarkup()
-            keyboard.add(types.InlineKeyboardButton(text='не делать подпись', callback_data='caption:none'))
 
-            bot.edit_message_text(f"Время установлено: {full_time} Введите подпись для фото(или нажмите нет):", chat_id=user_id, message_id= call.message.message_id, reply_markup=keyboard)
-
-
-            bot.register_next_step_handler(call.message, get_caption, user_id)
-    except Exception as e:
-        print(e)
 @bot.callback_query_handler(func = lambda call: call.data.startswith('mode:'))
 def set_quest(call):
     try:
@@ -121,24 +87,13 @@ def process_album_done(message, file_ids, group_id=None):
         if group_id and group_id in album_storage:
             del album_storage[group_id]
         temp_data[user_id] = {'file_ids': file_ids}
-        markup = types.InlineKeyboardMarkup(row_width=6)
-        buttons = [types.InlineKeyboardButton(str(h).zfill(2), callback_data=f"set_h:{h}") for h in range(24)]
-        markup.add(*buttons)
-        bot.send_message(user_id, "Фото получено! Выберите час для отправки ", reply_markup=markup)
+
+        msg =bot.send_message(user_id, "Фото получено! Выберите время для отправки в формате ЧЧ:MM (Например, 07:00 или 22:00) ")
+        bot.register_next_step_handler(msg, process_time_step, user_id)
     except Exception as e:
         print(e)
 
-def process_time_step(message, file_id):
-    try:
-        scheduled_time = message.text
-        if ":" not in scheduled_time:
-            bot.send_message(message.chat.id,"Ошибка формата")
-            return
 
-        msg = bot.send_message(message.chat_id, "Введите текст для подписи")
-        bot.register_next_step_handler(msg, get_caption, file_id, scheduled_time)
-    except Exception as e:
-        print(e)
 @bot.callback_query_handler(func=lambda call: call.data =='caption:none')
 def cancel_caption_callback(call):
     try:
@@ -153,10 +108,13 @@ def cancel_caption_callback(call):
 def save_photos_to_storage(user_id, caption):
     try:
         data = temp_data.get(user_id)
+        uid_str = str(user_id)
         if data and 'file_ids' in data and 'time' in data:
+            target_group = user_setting[uid_str].get('group_id')
             for f_id in data['file_ids']:
                 storagePhoto.append({
-                    "chat_id": Group_ID,
+                    "user_id": user_id,
+                    "chat_id": target_group,
                     "file_id": f_id,
                     "send_time": data["time"],
                     "caption": caption,
@@ -178,5 +136,109 @@ def get_caption(message, user_id ):
         bot.send_message(user_id, f"Готово! фотки запланированы на{time_str}")
     except Exception as e:
         print(e)
+
+
+def Delivery_shape():
+    while True:
+
+        for user_id_str, config in user_setting.items():
+            try:
+
+                user_tz = pytz.timezone(config.get('timezone', 'UTC'))
+                current_time = datetime.datetime.now(user_tz).strftime("%H:%M")
+
+
+                to_send = [item for item in storagePhoto if
+                           item["send_time"] == current_time and str(item["user_id"]) == user_id_str]
+
+                if to_send:
+                    media = []
+                    for i, photo_item in enumerate(to_send):
+
+                        caption = photo_item.get('caption') if i == 0 else None
+                        media.append(types.InputMediaPhoto(photo_item['file_id'], caption=caption))
+
+
+                    target_chat = config.get('group_id')
+
+                    if target_chat:
+                        bot.send_media_group(target_chat, media)
+
+
+                        for sent_item in to_send:
+                            if sent_item in storagePhoto:
+                                storagePhoto.remove(sent_item)
+
+                        print(f"[{current_time}] Альбом отправлен для {user_id_str} в группу {target_chat}")
+                    else:
+                        print(f"Ошибка: У юзера {user_id_str} не настроен group_id")
+
+            except Exception as e:
+                print(f"Ошибка планировщика для {user_id_str}: {e}")
+
+
+        time.sleep(30)
+
+
+threading.Thread(target=Delivery_shape, daemon=True).start()
+def process_time_step(message, user_id):
+    try:
+        scheduled_time = message.text.strip()
+        if len(scheduled_time) != 5 or ":" not in scheduled_time:
+            bot.send_message(message.chat.id,"Неверный формат! Пожалуйста, введите время ровно в формате ЧЧ:MM (Например, 07:00 или 22:00) ")
+            return
+        try:
+            datetime.datetime.strptime(scheduled_time, "%H:%M")
+        except ValueError:
+            msg = bot.send_message(user_id,  "Такого времени не существует! Часы должны быть от 00 до 23, а минуты от 00 до 59.\nПопробуйте еще раз:")
+            bot.register_next_step_handler(msg, process_time_step, user_id)
+            return
+        if user_id not in temp_data:
+            temp_data[user_id] ={}
+        temp_data[user_id]['time'] = scheduled_time
+
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(types.InlineKeyboardButton(text="Не делать подпись", callback_data='caption:none'))
+
+        msg = bot.send_message(message.chat.id, f"Время установлено: {scheduled_time}\n Введите подпись (Или не добавлять подпись)", reply_markup=keyboard)
+        bot.register_next_step_handler(msg, get_caption, user_id)
+    except Exception as e:
+        print(e)
+def SetTokenGroup(message):
+    try:
+        user_id = str(message.chat.id)
+        token = message.text.strip()
+        if user_id not in user_setting:
+            user_setting[user_id] = {}
+        user_setting[user_id]['group_id'] = token
+        save_settings(user_setting)
+        msg = bot.send_message(message.chat.id, "Токен сохранён! теперь введите ваш часовой пояс. На сайте https://www.zeitverschiebung.net/ можете найти свой часовой пояс.  Пример: Asia/Irkutsk")
+        bot.register_next_step_handler(msg, SetTimeZone)
+    except Exception as e:
+        msg = bot.send_message(message.chat.id, f"❌ Ошибка в токена. Попробуйте ввести еще раз:{e}")
+
+        bot.register_next_step_handler(msg, SetTokenGroup)
+def SetTimeZone(message):
+    try:
+        user_id = str(message.chat.id)
+        zone_name = message.text.strip()
+
+        pytz.timezone(zone_name)
+        if user_id not in user_setting:
+            user_setting[user_id] = {}
+
+        user_setting[user_id]['timezone'] = zone_name
+        save_settings(user_setting)
+        keyboard = types.InlineKeyboardMarkup()
+
+        bot.send_message(message.chat.id, f"Настройка завершена! \n {user_setting[user_id]['group_id']} \n Пояс: {zone_name}")
+        keyboard.add(types.InlineKeyboardButton(text='Выбрать: фотографии для доброе утро и спокойной ночи',
+                                                callback_data='mode:photo'))
+        keyboard.add(types.InlineKeyboardButton(text='Выбрать: удалить!!!', callback_data='mode:Clear'))
+        bot.send_message(message.chat.id, "Выберите режим", reply_markup=keyboard)
+    except Exception:
+        msg = bot.send_message(message.chat.id, "❌ Ошибка в названии пояса. Попробуйте ввести еще раз:")
+
+        bot.register_next_step_handler(msg, SetTimeZone)
 
 bot.infinity_polling()
