@@ -207,7 +207,12 @@ def process_time_step(message, user_id):
 def SetTokenGroup(message):
     try:
         user_id = str(message.chat.id)
+       
         token = message.text.strip()
+        if not token.replace('-', '', 1).isdigit():
+            msg = bot.send_message(message.chat.id, "❌ В ID группы должны быть только цифры (и минус в начале)! Попробуйте еще раз:")
+            bot.register_next_step_handler(msg, SetTokenGroup)
+            return
         if user_id not in user_setting:
             user_setting[user_id] = {}
         user_setting[user_id]['group_id'] = token
