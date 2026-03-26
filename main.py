@@ -205,6 +205,8 @@ def process_time_step(message, user_id):
     except Exception as e:
         print(e)
 def SetTokenGroup(message):
+    if message.text == '/start':
+        return sendMessage(message)
     try:
         user_id = str(message.chat.id)
        
@@ -224,6 +226,8 @@ def SetTokenGroup(message):
 
         bot.register_next_step_handler(msg, SetTokenGroup)
 def SetTimeZone(message):
+    if message.text == '/start':
+        return sendMessage(message)
     try:
         user_id = str(message.chat.id)
         zone_name = message.text.strip()
@@ -239,7 +243,7 @@ def SetTimeZone(message):
         bot.send_message(message.chat.id, f"Настройка завершена! \n {user_setting[user_id]['group_id']} \n Пояс: {zone_name}")
         keyboard.add(types.InlineKeyboardButton(text='Выбрать: фотографии для доброе утро и спокойной ночи',
                                                 callback_data='mode:photo'))
-        keyboard.add(types.InlineKeyboardButton(text='Выбрать: удалить!!!', callback_data='mode:Clear'))
+        keyboard.add(types.InlineKeyboardButton(text='Выбрать: удалить всё что вы отправляли мне!!!', callback_data='mode:Clear'))
         bot.send_message(message.chat.id, "Выберите режим", reply_markup=keyboard)
     except Exception:
         msg = bot.send_message(message.chat.id, "❌ Ошибка в названии пояса. Попробуйте ввести еще раз:")
